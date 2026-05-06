@@ -1,0 +1,108 @@
+--track@size:縁サイズ,0,500,7,1
+--track@stripe_size:ストライプ幅,1,1000,20,1
+--track@stripe_angle:角度,-3600,3600,45,0.01
+--color@col1:色1,0xff3232
+--color@col2:色2,0xffdc32
+--check@alter_size:縁取りの数値をテキストサイズと連動,1
+
+--[[pixelshader@psmain:
+Texture2D tex : register(t0);
+SamplerState samp : register(s0);
+
+cbuffer constant0 : register(b0) {
+    float w;
+    float h;
+    float stripe_size;
+    float angle;
+    float4 color1;
+    float4 color2;
+};
+
+float4 psmain(float4 pos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
+    float4 col = tex.Sample(samp, uv);
+    if (col.a == 0.0) return col;
+    
+    float2 p_pos = float2(uv.x * w, uv.y * h);
+    float2 center = float2(w * 0.5, h * 0.5);
+    float2 p = p_pos - center;
+    
+    float rad = angle * 3.14159265359 / 180.0;
+    float c = cos(rad);
+    float s = sin(rad);
+    
+    float u = p.x * c - p.y * s;
+    
+    // fracは0.0~1.0の値を返す
+    float t = frac(u / (stripe_size * 2.0));
+    float4 stripeCol = (t < 0.5) ? color1 : color2;
+    
+    return float4(stripeCol.rgb, col.a);
+}
+]]
+
+local condition, AKIRA_helper = pcall(require, "AKIRA_aviutl2_helper")
+
+local AKIRA_h = nil
+if condition then
+    AKIRA_h = AKIRA_helper
+else
+    AKIRA_h = nil
+    debug_print("AKIRA_aviutl2_helper.luaが同じフォルダに存在しません。")
+end
+
+local resize = 1
+if AKIRA_h then
+    resize = AKIRA_h.get_text_resize()
+end
+if alter_size == 0 then
+    resize = 1
+end
+
+obj.copybuffer("cache:grd_frame_text","obj")
+
+local ow,oh = 0,0
+if AKIRA_h then
+    ow,oh = AKIRA_h.get_text_size()
+else
+    ow,oh = obj.w, obj.h
+end
+local add_w,add_h = size *5,size *5
+
+obj.setoption("drawtarget", "tempbuffer", ow+add_w, oh+add_h)
+obj.clearbuffer("tempbuffer")
+
+obj.effect(
+    "縁取り",
+    "サイズ", math.max(0,size * resize),
+    "ぼかし", 0,
+    "縁色",   0xffffff
+)
+
+local function hex2rgba_unpack(hex)
+    if not hex then return 1.0, 1.0, 1.0, 1.0 end
+    local r = math.floor(hex / 65536) / 255.0
+    local g = math.floor((hex % 65536) / 256) / 255.0
+    local b = (hex % 256) / 255.0
+    return r, g, b, 1.0
+end
+
+local c1r, c1g, c1b, c1a = hex2rgba_unpack(col1)
+local c2r, c2g, c2b, c2a = hex2rgba_unpack(col2)
+
+local constants = {
+    obj.w, obj.h,
+    math.max(1, stripe_size * resize), stripe_angle,
+    c1r, c1g, c1b, c1a,
+    c2r, c2g, c2b, c2a
+}
+
+obj.pixelshader("psmain", "object", "object", constants, "copy", "clamp")
+
+local ox,oy,oz,cx,cy,cz = obj.ox,obj.oy,obj.oz,obj.cx,obj.cy,obj.cz
+local zoom = 1
+obj.draw(ox,oy,oz,zoom)
+
+obj.copybuffer("obj","cache:grd_frame_text")
+obj.draw(ox,oy,oz,zoom)
+
+obj.load("tempbuffer")
