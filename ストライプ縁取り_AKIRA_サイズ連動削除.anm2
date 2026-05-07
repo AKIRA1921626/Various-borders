@@ -1,3 +1,4 @@
+--lable:装飾
 --track@size:縁サイズ,0,500,7,1
 --track@stripe_size:ストライプ幅,1,1000,20,1
 --track@stripe_angle:角度,-3600,3600,45,0.01
